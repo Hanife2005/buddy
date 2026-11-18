@@ -92,14 +92,28 @@ async function nachrichtLesen(roh) {
   }
 }
 
+function istFatal(grund) {
+  return /api[ _-]?key|API_KEY|permission|PERMISSION_DENIED|quota|RESOURCE_EXHAUSTED|exceeded/i.test(grund || '');
+}
+
+function uhr(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+const MAX_NEUVERSUCHE = 3;
+const ANTWORT_TIMEOUT_MS = 12000;
+
 export class LiveAnruf {
   /**
-   * opts: apiKey, modell, systemText, stimme, tempo, unterbrechen, begruessung,
-   *       onStatus(text), onUntertitel(wer, text), onPegel(wert), onEnde({grund, text, dauerSek, transkript})
+   * opts: apiKey, modell, systemText, stimme, tempo, unterbrechen, begruessung, nameNutzer,
+   *       onStatus(text), onUntertitel(wer, text), onPegel(wert), onTonUnterbrochen(bool),
+   *       onEnde({grund, text, dauerSek, transkript, protokoll})
    */
   constructor(opts) {
     Object.assign(this, opts);
     this.transkript = [];
+    this.protokoll = [];
     this.aktUser = '';
     this.aktBuddy = '';
     this.quellen = new Set();
@@ -107,7 +121,25 @@ export class LiveAnruf {
     this.stumm = false;
     this.beendet = false;
     this.bereit = false;
+    this.minimal = false;
+    this.fortsetzen = false;
     this.startZeit = 0;
+    this.erstellt = Date.now();
+    this.neuVersuche = 0;
+    this.verbindungen = 0;
+    this.letzteUserZeit = 0;
+    this.letzteModellZeit = 0;
+    this.letzteMicZeit = 0;
+    this.goAway = false;
+    this.tonGestoert = false;
+    this.tokens = 0;
+  }
+
+  _log(text) {
+    const eintrag = `${uhr(Date.now() - this.erstellt)}  ${text}`;
+    this.protokoll.push(eintrag);
+    if (this.protokoll.length > 300) this.protokoll.splice(0, 50);
+    console.log('[Buddy]', eintrag);
   }
 
   // Muss direkt im Klick-Handler aufgerufen werden (iOS erlaubt Audio nur nach Nutzeraktion).
@@ -118,6 +150,7 @@ export class LiveAnruf {
     try {
       if (navigator.audioSession) navigator.audioSession.type = 'play-and-record';
     } catch {}
+    this._log(`Start · ${navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 90)}`);
     this._init().catch((e) => this._ende('fehler', (e && e.message) || String(e)));
   }
 
@@ -136,14 +169,30 @@ export class LiveAnruf {
       );
     }
     if (this.beendet) return this._aufraeumen();
+    const spur = this.stream.getAudioTracks()[0];
+    if (spur) {
+      spur.onended = () => this._log('Mikrofon wurde vom System beendet');
+      spur.onmute = () => this._log('Mikrofon vom System stummgeschaltet');
+      spur.onunmute = () => this._log('Mikrofon wieder aktiv');
+    }
 
-    // iOS hält den Audio-Kontext manchmal an, sobald das Mikrofon startet.
+    // iOS hält den Audio-Kontext manchmal an (Mikrofonstart, Mitteilung, Siri …).
     this.ctx.onstatechange = () => {
-      if (!this.beendet && this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {});
+      if (this.beendet) return;
+      this._log(`Audio-Status: ${this.ctx.state}`);
+      if (this.ctx.state !== 'running' && this.ctx.state !== 'closed') {
+        this.ctx.resume().catch(() => {});
+        setTimeout(() => {
+          if (!this.beendet && this.ctx.state !== 'running') this._tonStoerung(true);
+        }, 1500);
+      } else if (this.ctx.state === 'running') {
+        this._tonStoerung(false);
+      }
     };
     await this.ctx.resume().catch(() => {});
+    this._log(`Audio bereit (${this.ctx.sampleRate} Hz, Status ${this.ctx.state})`);
 
-    await this.ctx.audioWorklet.addModule(new URL('./mic-worklet.js', import.meta.url));
+    await this.ctx.audioWorklet.addModule(new URL('./mic-worklet.js?v=2', import.meta.url));
     if (this.beendet) return this._aufraeumen();
 
     this.quelle = this.ctx.createMediaStreamSource(this.stream);
@@ -161,46 +210,135 @@ export class LiveAnruf {
       if (navigator.wakeLock) this.wakeLock = await navigator.wakeLock.request('screen');
     } catch {}
 
-    this._verbinden(false);
+    this.wachhund = setInterval(() => this._wachhund(), 2000);
+    this._verbinden();
   }
 
-  _verbinden(minimal) {
-    this.onStatus('Verbinde …');
+  _tonStoerung(wert) {
+    if (this.tonGestoert === wert) return;
+    this.tonGestoert = wert;
+    if (wert) this._log('Ton/Mikrofon unterbrochen – warte auf Antippen');
+    if (this.onTonUnterbrochen) this.onTonUnterbrochen(wert);
+  }
+
+  // Wird vom Knopf „Ton wieder einschalten“ aufgerufen (braucht ein Antippen auf iOS).
+  tonFortsetzen() {
+    if (!this.ctx || this.beendet) return;
+    this.ctx
+      .resume()
+      .then(() => {
+        this._log(`Antippen → Audio-Status ${this.ctx.state}`);
+        if (this.ctx.state === 'running') {
+          this.letzteMicZeit = Date.now();
+          this._tonStoerung(false);
+        }
+      })
+      .catch((e) => this._log(`Fortsetzen fehlgeschlagen: ${e && e.message}`));
+  }
+
+  _verlaufText() {
+    const zeilen = this.transkript
+      .slice(-40)
+      .map((z) => `${z.wer === 'du' ? this.nameNutzer || 'Gegenüber' : 'Du'}: ${z.text}`)
+      .join('\n');
+    return zeilen
+      ? `\n\n# Bisheriger Verlauf dieses Telefonats\nDie Leitung war kurz unterbrochen. Das wurde bis eben gesagt:\n${zeilen}`
+      : '';
+  }
+
+  _verbinden() {
+    this.verbindungen++;
+    const nr = this.verbindungen;
+    this.onStatus(this.fortsetzen ? 'Verbindung wird wiederhergestellt …' : 'Verbinde …');
+    this._log(`Verbindung ${nr} wird aufgebaut${this.minimal ? ' (vereinfacht)' : ''}`);
     const ws = new WebSocket(`${wsAdresse()}?key=${encodeURIComponent(this.apiKey)}`);
     this.ws = ws;
     clearTimeout(this.setupTimer);
     this.setupTimer = setTimeout(() => {
       if (!this.bereit && ws === this.ws) {
-        this._ende('fehler', 'Google antwortet nicht. Prüfe deine Internetverbindung und versuch es noch einmal.');
+        this._log('Keine Antwort auf Verbindungsaufbau (15 s)');
+        this._ende(
+          this.startZeit ? 'getrennt' : 'fehler',
+          'Google antwortet nicht. Prüfe deine Internetverbindung und versuch es noch einmal.',
+        );
       }
     }, 15000);
 
+    const systemText = this.fortsetzen ? this.systemText + this._verlaufText() : this.systemText;
     ws.onopen = () => {
       ws.send(
         JSON.stringify(
-          setupNachricht({
-            modell: this.modell,
-            systemText: this.systemText,
-            stimme: this.stimme,
-            tempo: this.tempo,
-            minimal,
-          }),
+          setupNachricht({ modell: this.modell, systemText, stimme: this.stimme, tempo: this.tempo, minimal: this.minimal }),
         ),
       );
     };
-    ws.onmessage = (e) => this._nachricht(e.data).catch((err) => console.error(err));
+    ws.onmessage = (e) => {
+      if (ws !== this.ws) return;
+      this._nachricht(e.data).catch((err) => this._log(`Fehler beim Verarbeiten: ${err && err.message}`));
+    };
     ws.onclose = (e) => {
       if (this.beendet || ws !== this.ws) return;
       clearTimeout(this.setupTimer);
-      if (!this.bereit) {
-        if (!minimal && istKonfigFehler(e.code, e.reason)) {
-          console.warn('Setup abgelehnt, versuche vereinfachte Einstellungen:', e.reason);
-          return this._verbinden(true);
+      this._log(`Verbindung ${nr} geschlossen: Code ${e.code}${e.reason ? ` – ${e.reason}` : ''}`);
+      if (!this.bereit && !this.startZeit) {
+        if (!this.minimal && istKonfigFehler(e.code, e.reason)) {
+          this.minimal = true;
+          return this._verbinden();
         }
         return this._ende('fehler', fehlerText(e.code, e.reason));
       }
-      this._ende('getrennt', e.code === 1000 ? 'Google hat die Verbindung beendet.' : fehlerText(e.code, e.reason));
+      if (istFatal(e.reason)) return this._ende('getrennt', fehlerText(e.code, e.reason));
+      this._neuVerbinden('Verbindung getrennt');
     };
+  }
+
+  _neuVerbinden(grund) {
+    if (this.beendet) return;
+    this.neuVersuche++;
+    this._log(`Neu verbinden (${grund}), Versuch ${this.neuVersuche}`);
+    if (this.neuVersuche > MAX_NEUVERSUCHE) {
+      return this._ende(
+        'getrennt',
+        'Die Verbindung zu Google ist mehrmals abgebrochen. Vermutlich ist das kostenlose Kontingent gerade knapp. Versuch es in ein paar Minuten noch einmal.',
+      );
+    }
+    this._userAbschliessen();
+    this._buddyAbschliessen();
+    this._wiedergabeStoppen();
+    this.bereit = false;
+    this.goAway = false;
+    this.letzteUserZeit = 0;
+    this.fortsetzen = true;
+    const alt = this.ws;
+    this.ws = null;
+    try {
+      if (alt && alt.readyState <= 1) alt.close(1000);
+    } catch {}
+    this._verbinden();
+  }
+
+  _wachhund() {
+    if (this.beendet || !this.bereit) return;
+    const jetzt = Date.now();
+
+    // Mikrofon liefert nichts mehr → Audio-Kontext hängt (typisch iOS).
+    if (!this.stumm && this.letzteMicZeit && jetzt - this.letzteMicZeit > 4000 && !this.tonGestoert) {
+      this._log(`Mikrofon liefert seit 4 s keine Daten (Audio-Status ${this.ctx.state})`);
+      this.ctx.resume().catch(() => {});
+      this._tonStoerung(true);
+    }
+
+    // Nutzer hat gesprochen, Google antwortet nicht.
+    if (this.letzteUserZeit > this.letzteModellZeit && jetzt - this.letzteUserZeit > ANTWORT_TIMEOUT_MS) {
+      this._log(`Keine Antwort von Google seit ${Math.round((jetzt - this.letzteUserZeit) / 1000)} s`);
+      this._neuVerbinden('keine Antwort');
+      return;
+    }
+
+    // Google hat das Ende angekündigt → in einer Gesprächspause neu verbinden.
+    if (this.goAway && !this._spieltGerade() && jetzt - this.letzteUserZeit > 1500) {
+      this._neuVerbinden('Zeitlimit von Google');
+    }
   }
 
   async _nachricht(roh) {
@@ -210,11 +348,23 @@ export class LiveAnruf {
     if (m.setupComplete) {
       this.bereit = true;
       clearTimeout(this.setupTimer);
-      this.startZeit = Date.now();
+      if (!this.startZeit) this.startZeit = Date.now();
+      this.letzteMicZeit = Date.now();
+      this._log(`Verbindung ${this.verbindungen} steht`);
       this.onStatus('verbunden');
-      this._senden({ realtimeInput: { text: this.begruessung } });
+      if (this.fortsetzen) {
+        this._senden({
+          realtimeInput: {
+            text: '(Hinweis der App, nicht laut vorlesen: Die Leitung war kurz unterbrochen. Begrüße nicht neu. Sag kurz so etwas wie „Da bin ich wieder“ und knüpf an das Letzte an. Wenn die letzte Frage oder Aussage deines Gegenübers noch keine Antwort hatte, geh jetzt darauf ein.)',
+          },
+        });
+      } else {
+        this._senden({ realtimeInput: { text: this.begruessung } });
+      }
       return;
     }
+
+    if (m.usageMetadata && m.usageMetadata.totalTokenCount) this.tokens = m.usageMetadata.totalTokenCount;
 
     const sc = m.serverContent;
     if (sc) {
@@ -224,9 +374,11 @@ export class LiveAnruf {
       }
       if (sc.inputTranscription && sc.inputTranscription.text) {
         this.aktUser += sc.inputTranscription.text;
+        this.letzteUserZeit = Date.now();
         this.onUntertitel('du', this.aktUser);
       }
       if (sc.outputTranscription && sc.outputTranscription.text) {
+        this._modellAktiv();
         this._userAbschliessen();
         this.aktBuddy += sc.outputTranscription.text;
         this.onUntertitel('buddy', this.aktBuddy);
@@ -234,18 +386,28 @@ export class LiveAnruf {
       const teile = (sc.modelTurn && sc.modelTurn.parts) || [];
       for (const p of teile) {
         if (p.inlineData && p.inlineData.data && /audio/i.test(p.inlineData.mimeType || 'audio/pcm')) {
+          this._modellAktiv();
           this._userAbschliessen();
           this._abspielen(p.inlineData.data, abtastrate(p.inlineData.mimeType));
         }
       }
       if (sc.turnComplete) {
+        this._modellAktiv();
         this._userAbschliessen();
         this._buddyAbschliessen();
       }
     }
 
-    if (m.goAway) this.onStatus('Google beendet die Verbindung gleich (Zeitlimit).');
-    if (m.error) console.error('Fehler von Google:', m.error);
+    if (m.goAway) {
+      this._log(`Google kündigt Verbindungsende an (Restzeit ${JSON.stringify(m.goAway.timeLeft || '?')}, Tokens bisher ${this.tokens})`);
+      this.goAway = true;
+    }
+    if (m.error) this._log(`Fehlermeldung von Google: ${JSON.stringify(m.error).slice(0, 300)}`);
+  }
+
+  _modellAktiv() {
+    this.letzteModellZeit = Date.now();
+    this.neuVersuche = 0;
   }
 
   _senden(obj) {
@@ -261,6 +423,8 @@ export class LiveAnruf {
       if (this.onPegel) this.onPegel(this.stumm ? 0 : d.pegel);
       return;
     }
+    this.letzteMicZeit = Date.now();
+    if (this.tonGestoert) this._tonStoerung(false);
     if (!d.pcm || !this.bereit || this.stumm || this.beendet) return;
     // Option „Buddy ausreden lassen“: Während der Buddy spricht, wird das Mikrofon nicht gesendet.
     if (!this.unterbrechen && this._spieltGerade()) return;
@@ -307,7 +471,9 @@ export class LiveAnruf {
 
   setStumm(wert) {
     this.stumm = wert;
+    this._log(wert ? 'Stumm an' : 'Stumm aus');
     if (wert) this._senden({ realtimeInput: { audioStreamEnd: true } });
+    else this.letzteMicZeit = Date.now();
   }
 
   auflegen() {
@@ -316,16 +482,19 @@ export class LiveAnruf {
 
   _ende(grund, text) {
     if (this.beendet) return;
+    this._log(`Ende: ${grund}${text ? ` – ${text}` : ''}${this.tokens ? ` (Tokens ${this.tokens})` : ''}`);
     this.beendet = true;
     clearTimeout(this.setupTimer);
+    clearInterval(this.wachhund);
     this._userAbschliessen();
     this._buddyAbschliessen();
     const dauerSek = this.startZeit ? Math.round((Date.now() - this.startZeit) / 1000) : 0;
     this._aufraeumen();
-    this.onEnde({ grund, text, dauerSek, transkript: this.transkript });
+    this.onEnde({ grund, text, dauerSek, transkript: this.transkript, protokoll: this.protokoll });
   }
 
   _aufraeumen() {
+    clearInterval(this.wachhund);
     this._wiedergabeStoppen();
     try {
       if (this.ws && this.ws.readyState <= 1) this.ws.close(1000);

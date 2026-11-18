@@ -1,6 +1,6 @@
 // Buddy – Anweisungen an die KI (Persönlichkeit, Regeln, Gedächtnis).
 
-import { ROLLEN, bewertungenProTag, tagSchluessel } from './store.js';
+import { ROLLEN, bewertungenProTag, tagSchluessel } from './store.js?v=2';
 
 const ROLLEN_ANWEISUNG = {
   coach: (n) =>

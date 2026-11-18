@@ -18,10 +18,10 @@ import {
   importJson,
   tagSchluessel,
   bewertungenProTag,
-} from './store.js';
-import { systemPrompt, begruessung, zusammenfassungPrompt, effektivesTempo } from './prompt.js';
-import { LiveAnruf, verbindungTesten } from './live.js';
-import { textAnfrage, jsonAusText, ergebnisBereinigen, faktenAktualisieren } from './summary.js';
+} from './store.js?v=2';
+import { systemPrompt, begruessung, zusammenfassungPrompt, effektivesTempo } from './prompt.js?v=2';
+import { LiveAnruf, verbindungTesten } from './live.js?v=2';
+import { textAnfrage, jsonAusText, ergebnisBereinigen, faktenAktualisieren } from './summary.js?v=2';
 
 let daten = laden() || leereDaten();
 const app = document.getElementById('app');
@@ -299,6 +299,7 @@ function vAnruf() {
     <p class="ut-buddy" id="ut-buddy"></p>
     <p class="ut-du" id="ut-du"></p>
   </div>
+  <button id="ton-knopf" class="ton-hinweis" data-aktion="tonFortsetzen" hidden>🔊 Ton unterbrochen – hier tippen</button>
   <div class="anruf-knoepfe zwei">
     <div><button class="rund grau" id="stumm-knopf" data-aktion="stumm" aria-label="Stummschalten">🎙️</button><span id="stumm-text">Stumm</span></div>
     <div><button class="rund rot" data-aktion="auflegen" aria-label="Auflegen">✕</button><span>Auflegen</span></div>
@@ -359,6 +360,7 @@ function vNachher() {
   </section>
 
   ${zusammen ? `<section class="karte">${zusammen}</section>` : ''}
+  ${g.protokoll && g.protokoll.length ? `<section class="karte">${protokollHtml(g.protokoll)}</section>` : ''}
 
   <button class="knopf haupt" data-aktion="gehe" data-ziel="home">Fertig</button>
 </main>`;
@@ -389,6 +391,7 @@ function vVerlauf() {
               .join('')}</details>`
           : ''
       }
+      ${protokollHtml(g.protokoll)}
       <button class="knopf klein gefahr-text" data-aktion="gespraechLoeschen" data-id="${g.id}">Löschen</button>
     </section>`;
     })
@@ -451,7 +454,7 @@ function vEinstellungen() {
     <label class="knopf zweit datei">Sicherung einspielen<input type="file" accept="application/json,.json" id="import-datei" hidden></label>
     <button class="knopf gefahr" data-aktion="allesLoeschen">Alles löschen</button>
   </section>
-  <p class="leise klein-text mitte">Buddy · Version 1</p>
+  <p class="leise klein-text mitte">Buddy · Version 1.1</p>
 </main>`;
 }
 
@@ -525,12 +528,17 @@ function anrufStarten(buddyId, richtung) {
     tempo: effektivesTempo(daten, b),
     unterbrechen: daten.technik.unterbrechen,
     begruessung: begruessung(daten, b, richtung),
+    nameNutzer: (daten.nutzer && daten.nutzer.name) || '',
+    onTonUnterbrochen: (wert) => {
+      const k = document.getElementById('ton-knopf');
+      if (k) k.hidden = !wert;
+    },
     onStatus: (text) => {
       const el = statusEl();
       if (!el) return;
       if (text === 'verbunden') {
         el.textContent = 'verbunden';
-        clearInterval(anrufTimer);
+        if (anrufTimer) return; // Uhr läuft nach einem Neuverbinden einfach weiter
         const t0 = Date.now();
         anrufTimer = setInterval(() => {
           const z = document.getElementById('zeit');
@@ -553,8 +561,9 @@ function anrufStarten(buddyId, richtung) {
   anruf.starten();
 }
 
-function anrufBeendet(b, start, { grund, text, dauerSek, transkript }) {
+function anrufBeendet(b, start, { grund, text, dauerSek, transkript, protokoll }) {
   clearInterval(anrufTimer);
+  anrufTimer = null;
   anruf = null;
   const g = {
     id: neueId(),
@@ -564,6 +573,7 @@ function anrufBeendet(b, start, { grund, text, dauerSek, transkript }) {
     endeGrund: grund,
     endeText: text,
     transkript,
+    protokoll: protokoll || [],
     bewertung: null,
     zusammenfassung: '',
     mitnehmen: [],
@@ -572,7 +582,7 @@ function anrufBeendet(b, start, { grund, text, dauerSek, transkript }) {
   if (!hatInhalt && grund === 'fehler') {
     // Nicht zustande gekommen: nicht im Verlauf speichern, nur Fehler zeigen.
     zeige({ name: 'home' });
-    zeigeFehler(text);
+    zeigeFehler(text, protokoll);
     return;
   }
   daten.gespraeche.push(g);
@@ -581,10 +591,17 @@ function anrufBeendet(b, start, { grund, text, dauerSek, transkript }) {
   if (hatInhalt) zusammenfassen(g.id);
 }
 
-function zeigeFehler(text) {
+function protokollHtml(protokoll) {
+  if (!protokoll || !protokoll.length) return '';
+  const text = protokoll.join('\n');
+  return `<details class="protokoll"><summary>Technisches Protokoll</summary><pre>${esc(text)}</pre>
+    <button class="knopf klein" data-aktion="kopieren" data-text="${esc(text)}">Protokoll kopieren</button></details>`;
+}
+
+function zeigeFehler(text, protokoll) {
   const el = document.createElement('div');
   el.className = 'dialog-hinter';
-  el.innerHTML = `<div class="dialog"><h2>Das hat nicht geklappt</h2><p>${esc(text)}</p><button class="knopf haupt" data-aktion="dialogZu">OK</button></div>`;
+  el.innerHTML = `<div class="dialog"><h2>Das hat nicht geklappt</h2><p>${esc(text)}</p>${protokollHtml(protokoll)}<button class="knopf haupt" data-aktion="dialogZu">OK</button></div>`;
   document.body.appendChild(el);
 }
 
@@ -627,6 +644,9 @@ const aktionen = {
   auflegen: () => {
     if (anruf) anruf.auflegen();
     else zeige({ name: 'home' });
+  },
+  tonFortsetzen: () => {
+    if (anruf) anruf.tonFortsetzen();
   },
   stumm: () => {
     if (!anruf) return;
