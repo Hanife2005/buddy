@@ -192,7 +192,7 @@ export class LiveAnruf {
     await this.ctx.resume().catch(() => {});
     this._log(`Audio bereit (${this.ctx.sampleRate} Hz, Status ${this.ctx.state})`);
 
-    await this.ctx.audioWorklet.addModule(new URL('./mic-worklet.js?v=2', import.meta.url));
+    await this.ctx.audioWorklet.addModule(new URL('./mic-worklet.js?v=3', import.meta.url));
     if (this.beendet) return this._aufraeumen();
 
     this.quelle = this.ctx.createMediaStreamSource(this.stream);

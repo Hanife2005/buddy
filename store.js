@@ -39,6 +39,45 @@ export const ROLLEN = {
     stimme: 'Charon',
     farbe: '#5b5bd6',
   },
+  marketing: {
+    label: 'Marketing-Buddy',
+    beschreibung: 'Marketing, Marke, Kommunikation, Kampagnen und Trends',
+    standardName: 'Richard',
+    stimme: 'Orus',
+    farbe: '#c2185b',
+    arbeit: true,
+  },
+  recruiting: {
+    label: 'Recruiting-Buddy',
+    beschreibung: 'Recruiting, Stellenanzeigen, Interviews, Employer Branding',
+    standardName: 'Ela',
+    stimme: 'Zephyr',
+    farbe: '#00897b',
+    arbeit: true,
+  },
+  chef: {
+    label: 'CEO-Sparring',
+    beschreibung: 'Arbeit, Strategie, Prioritäten und Führung aus Chef-Sicht',
+    standardName: 'Paul',
+    stimme: 'Charon',
+    farbe: '#37474f',
+    arbeit: true,
+  },
+  it: {
+    label: 'IT-Buddy',
+    beschreibung: 'Technik, Software, IT-Sicherheit, Digitalisierung, KI-Tools',
+    standardName: 'Kiril',
+    stimme: 'Fenrir',
+    farbe: '#6d4c41',
+    arbeit: true,
+  },
+  eigene: {
+    label: 'Eigene Rolle',
+    beschreibung: 'Du beschreibst selbst, wer dein Buddy ist',
+    standardName: 'Sam',
+    stimme: 'Kore',
+    farbe: '#757575',
+  },
 };
 
 export const STIMMEN = [

@@ -197,3 +197,5 @@ body[data-ansicht="klingeln"], body[data-ansicht="anruf"] { background: #12171a;
   white-space: pre-wrap; word-break: break-word; font-size: .75rem; background: var(--bg);
   padding: 10px; border-radius: 8px; max-height: 260px; overflow: auto; color: var(--text);
 }
+
+[hidden] { display: none !important; }

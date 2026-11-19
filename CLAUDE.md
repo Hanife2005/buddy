@@ -24,6 +24,7 @@ cd tests && npm install
 node mock-server.js &        # nachgebauter Google-Server + App auf http://localhost:8080
 python3 test_app.py          # kompletter Ablauf: Einrichtung, Anruf, Zusammenfassung, Gedächtnis, Klingeln, Fehler
 python3 test_robust.py       # Neuverbinden nach Abbruch und wenn Google schweigt
+python3 test_rollen.py       # neue Rollen, eigene Rolle, Vertraulichkeitshinweis
 SETUP_STRENG=1 node mock-server.js &  &&  python3 test_fallback.py   # vereinfachte Einstellungen
 ```
 Die App liest im Test `localStorage['buddy.debug.ws']` und `['buddy.debug.rest']`, um den Testserver statt Google zu nutzen.

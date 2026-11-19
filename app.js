@@ -18,10 +18,10 @@ import {
   importJson,
   tagSchluessel,
   bewertungenProTag,
-} from './store.js?v=2';
-import { systemPrompt, begruessung, zusammenfassungPrompt, effektivesTempo } from './prompt.js?v=2';
-import { LiveAnruf, verbindungTesten } from './live.js?v=2';
-import { textAnfrage, jsonAusText, ergebnisBereinigen, faktenAktualisieren } from './summary.js?v=2';
+} from './store.js?v=3';
+import { systemPrompt, begruessung, zusammenfassungPrompt, effektivesTempo } from './prompt.js?v=3';
+import { LiveAnruf, verbindungTesten } from './live.js?v=3';
+import { textAnfrage, jsonAusText, ergebnisBereinigen, faktenAktualisieren } from './summary.js?v=3';
 
 let daten = laden() || leereDaten();
 const app = document.getElementById('app');
@@ -225,6 +225,7 @@ function vBuddyBearbeiten() {
         stimme: ROLLEN[rolleStart].stimme,
         tempo: 'profil',
         wuensche: '',
+        rollenText: '',
       }
     : buddy(ansicht.id);
   if (!b) return vHome();
@@ -233,9 +234,11 @@ function vBuddyBearbeiten() {
   ${kopf(neu ? 'Neuer Buddy' : `${b.name} bearbeiten`)}
   <form id="f-buddy" class="formular">
     <label>Name<input name="name" required value="${esc(b.name)}"></label>
-    <label>Rolle<select name="rolle">${Object.entries(ROLLEN)
+    <label>Rolle<select name="rolle" ${neu ? 'data-neu="1"' : ''}>${Object.entries(ROLLEN)
       .map(([k, r]) => `<option value="${k}" ${k === b.rolle ? 'selected' : ''}>${esc(r.label)} – ${esc(r.beschreibung)}</option>`)
       .join('')}</select></label>
+    <label id="rollen-text" ${b.rolle === 'eigene' ? '' : 'hidden'}>Wer ist dein Buddy?
+      <textarea name="rollenText" rows="4" placeholder="z. B. „Eine erfahrene Gärtnerin, die mir bei meinem Balkon hilft und gern über Pflanzen plaudert“">${esc(b.rollenText)}</textarea></label>
     <label>Sprache<select name="sprache">${optionen(SPRACHEN, b.sprache)}</select></label>
     <label>Anrede<select name="anrede">${optionen({ du: 'du', sie: 'Sie' }, b.anrede)}</select></label>
     <label>Stimme<select name="stimme">${STIMMEN.map((s) => `<option value="${s.id}" ${s.id === b.stimme ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select>
@@ -454,7 +457,7 @@ function vEinstellungen() {
     <label class="knopf zweit datei">Sicherung einspielen<input type="file" accept="application/json,.json" id="import-datei" hidden></label>
     <button class="knopf gefahr" data-aktion="allesLoeschen">Alles löschen</button>
   </section>
-  <p class="leise klein-text mitte">Buddy · Version 1.1</p>
+  <p class="leise klein-text mitte">Buddy · Version 1.2</p>
 </main>`;
 }
 
@@ -783,6 +786,7 @@ document.addEventListener('submit', (e) => {
       stimme: f.stimme,
       tempo: f.tempo,
       wuensche: f.wuensche,
+      rollenText: f.rolle === 'eigene' ? f.rollenText || '' : '',
     };
     if (ansicht.id) {
       Object.assign(buddy(ansicht.id), werte);
@@ -843,6 +847,20 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('change', async (e) => {
+  // Buddy-Formular: Rollenbeschreibung nur bei „Eigene Rolle“; bei neuen Buddys Name und Stimme vorschlagen.
+  if (e.target.name === 'rolle' && e.target.form && e.target.form.id === 'f-buddy') {
+    const form = e.target.form;
+    const r = ROLLEN[e.target.value];
+    const feld = document.getElementById('rollen-text');
+    if (feld) feld.hidden = e.target.value !== 'eigene';
+    if (e.target.dataset.neu && r) {
+      const name = form.querySelector('input[name="name"]');
+      const istStandard = !name.value.trim() || Object.values(ROLLEN).some((x) => x.standardName === name.value.trim());
+      if (istStandard) name.value = r.standardName;
+      form.querySelector('select[name="stimme"]').value = r.stimme;
+    }
+    return;
+  }
   if (e.target.id !== 'import-datei' || !e.target.files || !e.target.files[0]) return;
   try {
     const text = await e.target.files[0].text();

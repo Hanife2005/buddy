@@ -3,7 +3,7 @@
 Dieses Dokument hält fest, was wir entschieden haben, warum, was fertig ist und was als Nächstes kommt.
 Es wird bei jeder Weiterentwicklung aktualisiert.
 
-Stand: 19.11.2026 · Version 1.1
+Stand: 19.11.2026 · Version 1.2
 
 ---
 
@@ -68,12 +68,13 @@ echten Menschen einbringen.
 ## 4. Was Version 1.1 kann
 
 - Einrichtung: Name, Alter (schlägt Sprechtempo vor), Zweck, Sprechtempo, Hören, Sprache, Anrede, Schlüssel
-- Mehrere Buddys: Coach, Sportbuddy, Reisebuddy, Plauderpartner, Denkpartner, jeweils mit Name, Stimme, Sprache (DE/FR/EN), Anrede, Tempo und eigenen Wünschen
+- Mehrere Buddys: Coach, Sportbuddy, Reisebuddy, Plauderpartner, Denkpartner, Marketing-Buddy (Richard), Recruiting-Buddy (Ela), CEO-Sparring (Paul, fiktiv – nicht der echte Chef), IT-Buddy (Kiril) sowie **Eigene Rolle** mit selbst geschriebener Rollenbeschreibung, jeweils mit Name, Stimme, Sprache (DE/FR/EN), Anrede, Tempo und eigenen Wünschen
 - Anrufbildschirm mit Annehmen/Ablehnen, Untertiteln, Stummschalten, Gesprächszeit, Mikrofonpegel
 - Selbst anrufen (grüner Hörer) oder angerufen werden (Wecker-Link `?anruf=<id>`)
 - Gedächtnis: Nach jedem Gespräch werden Fakten gemerkt, alte korrigiert, sichtbar und löschbar unter „Was sich Buddy merkt“
 - Tagesbewertung und Übersicht der letzten 14 bzw. 30 Tage
 - Karte „Zum Mitnehmen“ mit 1–3 Gedanken für echte Gespräche, bei Fakten mit „nachprüfen“-Link
+- Arbeits-Buddys erinnern einmal pro Gespräch freundlich daran, keine Firmeninterna oder Daten Dritter zu nennen (kostenlose Stufe)
 - Übungsgespräche (z. B. Gehaltsverhandlung), indem man es im Gespräch ansagt
 - Automatisches Neuverbinden bei Abbruch, Zeitlimit oder wenn Google nicht antwortet; der Gesprächsverlauf wird mitgegeben
 - Hinweis-Knopf, wenn iOS den Ton anhält
@@ -136,5 +137,6 @@ echten Menschen einbringen.
 - Tests: `tests/` (nachgebauter Google-Server + Browser-Tests), siehe `CLAUDE.md`
 
 ## Änderungsverlauf
+- **1.2** (19.11.2026): neue Rollen Marketing, Recruiting, CEO-Sparring, IT und „Eigene Rolle“; Name und Stimme werden beim Rollenwechsel vorgeschlagen
 - **1.1** (19.11.2026): automatisches Neuverbinden, Ton-Unterbrechung erkennen, technisches Protokoll
 - **1.0** (19.11.2026): erste Version
