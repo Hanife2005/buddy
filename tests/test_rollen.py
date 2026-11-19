@@ -35,4 +35,8 @@ L = json.loads(urllib.request.urlopen("http://localhost:8080/log").read())
 st = [e["setup"]["systemInstruction"]["parts"][0]["text"] for e in L if e["typ"]=="setup" and e["key"].startswith("TESTKEY-rollen")]
 assert "fiktive Figur" in st[0] and "Vertraulichkeit" in st[0] and "Paul" in st[0]
 assert "Gärtnerin" in st[1] and "Vertraulichkeit" not in st[1]
+setups = [e["setup"] for e in L if e["typ"]=="setup" and e["key"].startswith("TESTKEY-rollen")]
+assert setups[0].get("tools") == [{"googleSearch": {}}], setups[0].get("tools")
+assert "tools" not in setups[1]
+assert "Google-Suche nutzen" in st[0] and "Google-Suche nutzen" not in st[1]
 print("Fehler:", errs); print("ROLLEN OK")

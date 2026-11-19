@@ -18,10 +18,10 @@ import {
   importJson,
   tagSchluessel,
   bewertungenProTag,
-} from './store.js?v=3';
-import { systemPrompt, begruessung, zusammenfassungPrompt, effektivesTempo } from './prompt.js?v=3';
-import { LiveAnruf, verbindungTesten } from './live.js?v=3';
-import { textAnfrage, jsonAusText, ergebnisBereinigen, faktenAktualisieren } from './summary.js?v=3';
+} from './store.js?v=4';
+import { systemPrompt, begruessung, zusammenfassungPrompt, effektivesTempo } from './prompt.js?v=4';
+import { LiveAnruf, verbindungTesten } from './live.js?v=4';
+import { textAnfrage, jsonAusText, ergebnisBereinigen, faktenAktualisieren } from './summary.js?v=4';
 
 let daten = laden() || leereDaten();
 const app = document.getElementById('app');
@@ -226,6 +226,7 @@ function vBuddyBearbeiten() {
         tempo: 'profil',
         wuensche: '',
         rollenText: '',
+        internet: !!ROLLEN[rolleStart].suche,
       }
     : buddy(ansicht.id);
   if (!b) return vHome();
@@ -244,6 +245,7 @@ function vBuddyBearbeiten() {
     <label>Stimme<select name="stimme">${STIMMEN.map((s) => `<option value="${s.id}" ${s.id === b.stimme ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select>
       <small class="leise">Am besten ausprobieren und bei Bedarf wechseln.</small></label>
     <label>Sprechtempo<select name="tempo">${optionen({ profil: 'Wie in meinem Profil', ...TEMPI }, b.tempo || 'profil')}</select></label>
+    <label class="wahl"><input type="checkbox" name="internet" ${b.internet ? 'checked' : ''}><span>Darf während des Gesprächs bei Google nachschauen<br><small class="leise">Für aktuelle und spezielle Fragen, z. B. dein Router-Modell oder neue Trends.</small></span></label>
     <label>Besondere Wünsche an ${neu ? 'deinen Buddy' : esc(b.name)} <span class="leise">(optional)</span>
       <textarea name="wuensche" rows="3" placeholder="z. B. „Frag mich abends nach meinen Meetings“ oder „Sei ruhig etwas frech“">${esc(b.wuensche)}</textarea></label>
     <button class="knopf haupt" type="submit">Speichern</button>
@@ -457,7 +459,7 @@ function vEinstellungen() {
     <label class="knopf zweit datei">Sicherung einspielen<input type="file" accept="application/json,.json" id="import-datei" hidden></label>
     <button class="knopf gefahr" data-aktion="allesLoeschen">Alles löschen</button>
   </section>
-  <p class="leise klein-text mitte">Buddy · Version 1.2</p>
+  <p class="leise klein-text mitte">Buddy · Version 1.3</p>
 </main>`;
 }
 
@@ -530,6 +532,7 @@ function anrufStarten(buddyId, richtung) {
     stimme: b.stimme || ROLLEN[b.rolle].stimme,
     tempo: effektivesTempo(daten, b),
     unterbrechen: daten.technik.unterbrechen,
+    suche: !!b.internet,
     begruessung: begruessung(daten, b, richtung),
     nameNutzer: (daten.nutzer && daten.nutzer.name) || '',
     onTonUnterbrochen: (wert) => {
@@ -769,6 +772,7 @@ document.addEventListener('submit', (e) => {
         stimme: r.stimme,
         tempo: 'profil',
         wuensche: '',
+        internet: !!r.suche,
       });
     }
     sichern();
@@ -787,6 +791,7 @@ document.addEventListener('submit', (e) => {
       tempo: f.tempo,
       wuensche: f.wuensche,
       rollenText: f.rolle === 'eigene' ? f.rollenText || '' : '',
+      internet: !!f.internet,
     };
     if (ansicht.id) {
       Object.assign(buddy(ansicht.id), werte);
@@ -858,6 +863,7 @@ document.addEventListener('change', async (e) => {
       const istStandard = !name.value.trim() || Object.values(ROLLEN).some((x) => x.standardName === name.value.trim());
       if (istStandard) name.value = r.standardName;
       form.querySelector('select[name="stimme"]').value = r.stimme;
+      form.querySelector('input[name="internet"]').checked = !!r.suche;
     }
     return;
   }

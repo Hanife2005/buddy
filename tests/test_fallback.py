@@ -7,7 +7,7 @@ with sync_playwright() as p:
     pg = c.new_page(); errs=[]; pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.goto("http://localhost:8080/")
     pg.fill("input[name=name]","Test"); pg.fill("input[name=key]","TESTKEY-abcdefghijklmnopqrstuvwxyz"); pg.check("input[name=ok]"); pg.click("button[type=submit]")
-    pg.click("[data-aktion=anrufen]")
+    pg.locator("[data-aktion=anrufen]").first.click()
     expect(pg.locator("#status")).to_have_text("verbunden", timeout=10000)
     pg.click("[data-aktion=auflegen]")
     b.close()

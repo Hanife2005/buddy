@@ -24,6 +24,7 @@ export const ROLLEN = {
     standardName: 'Lina',
     stimme: 'Aoede',
     farbe: '#2a6fb0',
+    suche: true,
   },
   plaudern: {
     label: 'Plauderpartner',
@@ -38,6 +39,7 @@ export const ROLLEN = {
     standardName: 'Theo',
     stimme: 'Charon',
     farbe: '#5b5bd6',
+    suche: true,
   },
   marketing: {
     label: 'Marketing-Buddy',
@@ -46,6 +48,7 @@ export const ROLLEN = {
     stimme: 'Orus',
     farbe: '#c2185b',
     arbeit: true,
+    suche: true,
   },
   recruiting: {
     label: 'Recruiting-Buddy',
@@ -54,6 +57,7 @@ export const ROLLEN = {
     stimme: 'Zephyr',
     farbe: '#00897b',
     arbeit: true,
+    suche: true,
   },
   chef: {
     label: 'CEO-Sparring',
@@ -62,6 +66,7 @@ export const ROLLEN = {
     stimme: 'Charon',
     farbe: '#37474f',
     arbeit: true,
+    suche: true,
   },
   it: {
     label: 'IT-Buddy',
@@ -70,6 +75,7 @@ export const ROLLEN = {
     stimme: 'Fenrir',
     farbe: '#6d4c41',
     arbeit: true,
+    suche: true,
   },
   eigene: {
     label: 'Eigene Rolle',
@@ -135,7 +141,10 @@ function vervollstaendigen(d) {
   const leer = leereDaten();
   const out = { ...leer, ...d };
   out.technik = { ...leer.technik, ...(d.technik || {}) };
-  out.buddies = Array.isArray(d.buddies) ? d.buddies : [];
+  // Ältere Buddys ohne Einstellung „internet“ bekommen den Standard ihrer Rolle.
+  out.buddies = (Array.isArray(d.buddies) ? d.buddies : []).map((b) =>
+    b.internet === undefined ? { ...b, internet: !!(ROLLEN[b.rolle] && ROLLEN[b.rolle].suche) } : b,
+  );
   out.fakten = Array.isArray(d.fakten) ? d.fakten : [];
   out.gespraeche = Array.isArray(d.gespraeche) ? d.gespraeche : [];
   return out;

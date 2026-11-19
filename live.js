@@ -19,7 +19,7 @@ const TEMPO_VAD = {
   langsam: { silenceDurationMs: 2500, endOfSpeechSensitivity: 'END_SENSITIVITY_LOW', prefixPaddingMs: 300 },
 };
 
-export function setupNachricht({ modell, systemText, stimme, tempo, minimal }) {
+export function setupNachricht({ modell, systemText, stimme, tempo, minimal, suche }) {
   const setup = {
     model: `models/${modell}`,
     generationConfig: {
@@ -33,6 +33,7 @@ export function setupNachricht({ modell, systemText, stimme, tempo, minimal }) {
   if (!minimal) {
     setup.realtimeInputConfig = { automaticActivityDetection: { ...(TEMPO_VAD[tempo] || TEMPO_VAD.normal) } };
     setup.contextWindowCompression = { slidingWindow: {} };
+    if (suche) setup.tools = [{ googleSearch: {} }];
   }
   return { setup };
 }
@@ -122,6 +123,7 @@ export class LiveAnruf {
     this.beendet = false;
     this.bereit = false;
     this.minimal = false;
+    this.ohneSuche = false;
     this.fortsetzen = false;
     this.startZeit = 0;
     this.erstellt = Date.now();
@@ -192,7 +194,7 @@ export class LiveAnruf {
     await this.ctx.resume().catch(() => {});
     this._log(`Audio bereit (${this.ctx.sampleRate} Hz, Status ${this.ctx.state})`);
 
-    await this.ctx.audioWorklet.addModule(new URL('./mic-worklet.js?v=3', import.meta.url));
+    await this.ctx.audioWorklet.addModule(new URL('./mic-worklet.js?v=4', import.meta.url));
     if (this.beendet) return this._aufraeumen();
 
     this.quelle = this.ctx.createMediaStreamSource(this.stream);
@@ -250,7 +252,8 @@ export class LiveAnruf {
     this.verbindungen++;
     const nr = this.verbindungen;
     this.onStatus(this.fortsetzen ? 'Verbindung wird wiederhergestellt …' : 'Verbinde …');
-    this._log(`Verbindung ${nr} wird aufgebaut${this.minimal ? ' (vereinfacht)' : ''}`);
+    const mitSuche = !!this.suche && !this.ohneSuche && !this.minimal;
+    this._log(`Verbindung ${nr} wird aufgebaut${this.minimal ? ' (vereinfacht)' : ''}${mitSuche ? ' mit Google-Suche' : ''}`);
     const ws = new WebSocket(`${wsAdresse()}?key=${encodeURIComponent(this.apiKey)}`);
     this.ws = ws;
     clearTimeout(this.setupTimer);
@@ -268,7 +271,7 @@ export class LiveAnruf {
     ws.onopen = () => {
       ws.send(
         JSON.stringify(
-          setupNachricht({ modell: this.modell, systemText, stimme: this.stimme, tempo: this.tempo, minimal: this.minimal }),
+          setupNachricht({ modell: this.modell, systemText, stimme: this.stimme, tempo: this.tempo, minimal: this.minimal, suche: mitSuche }),
         ),
       );
     };
@@ -281,9 +284,17 @@ export class LiveAnruf {
       clearTimeout(this.setupTimer);
       this._log(`Verbindung ${nr} geschlossen: Code ${e.code}${e.reason ? ` – ${e.reason}` : ''}`);
       if (!this.bereit && !this.startZeit) {
-        if (!this.minimal && istKonfigFehler(e.code, e.reason)) {
-          this.minimal = true;
-          return this._verbinden();
+        if (istKonfigFehler(e.code, e.reason)) {
+          // Stufenweise vereinfachen: erst ohne Google-Suche, dann ganz einfache Einstellungen.
+          if (mitSuche) {
+            this.ohneSuche = true;
+            this._log('Google-Suche wird nicht angenommen – versuche ohne Suche');
+            return this._verbinden();
+          }
+          if (!this.minimal) {
+            this.minimal = true;
+            return this._verbinden();
+          }
         }
         return this._ende('fehler', fehlerText(e.code, e.reason));
       }
@@ -398,6 +409,11 @@ export class LiveAnruf {
       }
     }
 
+    if (sc && sc.groundingMetadata) {
+      const q = sc.groundingMetadata.webSearchQueries;
+      this._log(`Google-Suche genutzt${q && q.length ? `: ${q.join(' | ').slice(0, 120)}` : ''}`);
+    }
+    if (m.toolCall) this._log(`Werkzeug-Aufruf von Google: ${JSON.stringify(m.toolCall).slice(0, 160)}`);
     if (m.goAway) {
       this._log(`Google kündigt Verbindungsende an (Restzeit ${JSON.stringify(m.goAway.timeLeft || '?')}, Tokens bisher ${this.tokens})`);
       this.goAway = true;
@@ -520,19 +536,19 @@ export class LiveAnruf {
 }
 
 // Prüft, ob Schlüssel und Modell funktionieren – ohne Mikrofon.
-export function verbindungTesten({ apiKey, modell }) {
+function einzelTest({ apiKey, modell, suche }) {
   return new Promise((resolve) => {
     let fertig = false;
-    const ende = (ok, text) => {
+    let ws;
+    const ende = (ok, text, code, grund) => {
       if (fertig) return;
       fertig = true;
       clearTimeout(timer);
       try {
         ws.close(1000);
       } catch {}
-      resolve({ ok, text });
+      resolve({ ok, text, code, grund });
     };
-    let ws;
     try {
       ws = new WebSocket(`${wsAdresse()}?key=${encodeURIComponent(apiKey)}`);
     } catch (e) {
@@ -541,15 +557,20 @@ export function verbindungTesten({ apiKey, modell }) {
     }
     const timer = setTimeout(() => ende(false, 'Keine Antwort von Google (Zeitüberschreitung).'), 15000);
     ws.onopen = () =>
-      ws.send(
-        JSON.stringify(
-          setupNachricht({ modell, systemText: 'Test.', stimme: 'Kore', tempo: 'normal', minimal: false }),
-        ),
-      );
+      ws.send(JSON.stringify(setupNachricht({ modell, systemText: 'Test.', stimme: 'Kore', tempo: 'normal', minimal: false, suche })));
     ws.onmessage = async (e) => {
       const m = await nachrichtLesen(e.data);
-      if (m && m.setupComplete) ende(true, `Verbindung klappt. Modell: ${modell}`);
+      if (m && m.setupComplete) ende(true, '');
     };
-    ws.onclose = (e) => ende(false, fehlerText(e.code, e.reason));
+    ws.onclose = (e) => ende(false, fehlerText(e.code, e.reason), e.code, e.reason);
   });
+}
+
+export async function verbindungTesten({ apiKey, modell }) {
+  const mit = await einzelTest({ apiKey, modell, suche: true });
+  if (mit.ok) return { ok: true, text: `Verbindung klappt, Google-Suche verfügbar. Modell: ${modell}` };
+  if (!istKonfigFehler(mit.code, mit.grund)) return { ok: false, text: mit.text };
+  const ohne = await einzelTest({ apiKey, modell, suche: false });
+  if (ohne.ok) return { ok: true, text: `Verbindung klappt, aber ohne Google-Suche. Modell: ${modell}` };
+  return { ok: false, text: ohne.text };
 }

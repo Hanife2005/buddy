@@ -3,7 +3,7 @@
 Dieses Dokument hält fest, was wir entschieden haben, warum, was fertig ist und was als Nächstes kommt.
 Es wird bei jeder Weiterentwicklung aktualisiert.
 
-Stand: 19.11.2026 · Version 1.2
+Stand: 19.11.2026 · Version 1.3
 
 ---
 
@@ -74,6 +74,8 @@ echten Menschen einbringen.
 - Gedächtnis: Nach jedem Gespräch werden Fakten gemerkt, alte korrigiert, sichtbar und löschbar unter „Was sich Buddy merkt“
 - Tagesbewertung und Übersicht der letzten 14 bzw. 30 Tage
 - Karte „Zum Mitnehmen“ mit 1–3 Gedanken für echte Gespräche, bei Fakten mit „nachprüfen“-Link
+- **Google-Suche im Gespräch** (pro Buddy schaltbar, Standard bei Reise, Denken, Marketing, Recruiting, CEO, IT): für Aktuelles und Spezielles, Quelle wird genannt. Wird die Suche von Google abgelehnt, verbindet die App automatisch ohne Suche
+- Fachlich geschärfte Experten-Rollen (z. B. IT: systematische Fehlersuche, ein Schritt nach dem anderen, Warnung vor Werkseinstellungen; Recruiting: strukturierte Interviews, STAR, AGG)
 - Arbeits-Buddys erinnern einmal pro Gespräch freundlich daran, keine Firmeninterna oder Daten Dritter zu nennen (kostenlose Stufe)
 - Übungsgespräche (z. B. Gehaltsverhandlung), indem man es im Gespräch ansagt
 - Automatisches Neuverbinden bei Abbruch, Zeitlimit oder wenn Google nicht antwortet; der Gesprächsverlauf wird mitgegeben
@@ -90,6 +92,7 @@ echten Menschen einbringen.
 - **Kostenlose Stufe:** Limits pro Minute und Tag (genaue Werte für 3.8 Live unbekannt), Daten werden von Google zur Verbesserung genutzt, Bedingungen können sich ändern.
 - **Bezahlt:** ca. 0,005 $/Min. Audio rein + 0,018 $/Min. Audio raus (Stand Okt. 2026), also grob 10 $ pro Person und Monat bei 15 Min. täglich.
 - **Halluzinationen:** Die KI kann sich irren. Gegenmittel: Unsicherheit aussprechen und den „nachprüfen“-Link nutzen.
+- **„Immer aktuell“ gibt es nicht:** Die KI lernt nicht von selbst dazu. Aktuelles kommt nur über die Google-Suche im Gespräch; ob die in der kostenlosen Stufe zuverlässig läuft, ist noch nicht mit echtem Schlüssel getestet (Einstellungen → „Verbindung testen“ zeigt es an).
 - **Wirkung unbewiesen:** Dass KI-Gespräche gegen Gesprächsscheu helfen oder geistigen Abbau bremsen, ist eine Hoffnung, kein belegter Fakt. Nicht damit werben.
 
 ---
@@ -137,6 +140,7 @@ echten Menschen einbringen.
 - Tests: `tests/` (nachgebauter Google-Server + Browser-Tests), siehe `CLAUDE.md`
 
 ## Änderungsverlauf
+- **1.3** (19.11.2026): Google-Suche im Gespräch (pro Buddy), fachlich geschärfte Experten-Rollen, Anleitungen Schritt für Schritt, stufenweiser Rückfall ohne Suche
 - **1.2** (19.11.2026): neue Rollen Marketing, Recruiting, CEO-Sparring, IT und „Eigene Rolle“; Name und Stimme werden beim Rollenwechsel vorgeschlagen
 - **1.1** (19.11.2026): automatisches Neuverbinden, Ton-Unterbrechung erkennen, technisches Protokoll
 - **1.0** (19.11.2026): erste Version

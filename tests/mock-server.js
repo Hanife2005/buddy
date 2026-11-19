@@ -76,6 +76,7 @@ wss.on('connection', (ws, req) => {
     if (m.setup) {
       LOG.push({ typ: 'setup', key, setup: m.setup });
       if (modus === 'falsch') return ws.close(1007, 'API key not valid. Please pass a valid API key.');
+      if (m.setup.tools && process.env.OHNE_SUCHE) return ws.close(1007, 'Invalid JSON payload received. Unknown name "googleSearch"');
       if (m.setup.realtimeInputConfig && process.env.SETUP_STRENG) return ws.close(1007, 'Invalid JSON payload received. Unknown name "realtimeInputConfig"');
       // Als Binärframe senden, wie Google es oft tut (prüft Blob-Behandlung).
       return ws.send(Buffer.from(JSON.stringify({ setupComplete: {} })));
