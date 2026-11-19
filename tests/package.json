@@ -1,0 +1,6 @@
+{
+  "name": "buddy-tests",
+  "private": true,
+  "description": "Testserver für Buddy (spielt die Gemini-API nach)",
+  "dependencies": { "ws": "^8.18.0" }
+}
